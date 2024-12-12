@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive 3D Skull Viewer</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+        #loader {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: #ffffff;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 20px;
+            border-radius: 5px;
+            z-index: 1000;
+        }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #333;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            opacity: 0;
+            transition: opacity 0.5s;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loader Element -->
+    <div id="loader">Loading model...</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@latest/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@latest/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@latest/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        // Scene Setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting
+        const light = new THREE.AmbientLight(0x404040); // Soft white light
+        scene.add(light);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(5, 10, 7.5);
+        scene.add(directionalLight);
+
+        // Camera Position
+        camera.position.z = 5;
+
+        // Controls
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+        // Load GLTF Model
+        const loader = new THREE.GLTFLoader();
+        let model;
+        let jaw; // Reference to the jaw mesh for animation
+        let teeth = []; // Array to store individual teeth for interaction
+
+        loader.load(
+            './skull/skull.gltf', // Replace with your model's path
+            (gltf) => {
+                model = gltf.scene;
+                model.scale.set(1, 1, 1); // Adjust scale as necessary
+                scene.add(model);
+
+                // Traverse the model to log all meshes and find teeth
+                model.traverse((child) => {
+                    if (child.isMesh) {
+                        // console.log('Mesh name:', child.name); // Log mesh name for debugging
+                        if (child.name.toLowerCase().includes('jaw')) {
+                            jaw = child; // Store the jaw mesh for animation
+                        }
+                        // Store the tooth meshes with specific names
+                        const toothNames = [
+                            'Lower_Canine_Left', 'Lower_Canine_Right',
+                            'Lower_CentralIncisor_Left', 'Lower_CentralIncisor_Right',
+                            'Lower_FirstMolar_Left', 'Lower_FirstMolar_Right',
+                            'Lower_FirstPremolar_Left', 'Lower_FirstPremolar_Right',
+                            'Lower_LateralIncisor_Left', 'Lower_LateralIncisor_Right',
+                            'Lower_SecondMolar_Left', 'Lower_SecondMolar_Right',
+                            'Lower_SecondPremolar_Left', 'Lower_SecondPremolar_Right',
+                            'Upper_Canine_Left', 'Upper_Canine_Right',
+                            'Upper_CentralIncisor_Left', 'Upper_CentralIncisor_Right',
+                            'Upper_FirstMolar_Left', 'Upper_FirstMolar_Right',
+                            'Upper_FirstPremolar_Left', 'Upper_FirstPremolar_Right',
+                            'Upper_LateralIncisor_Left', 'Upper_LateralIncisor_Right',
+                            'Upper_SecondMolar_Left', 'Upper_SecondMolar_Right',
+                            'Upper_SecondPremolar_Left', 'Upper_SecondPremolar_Right'
+                        ];
+
+                        if (toothNames.includes(child.name)) {
+                            child.userData.status = 'healthy'; // Initial status for all teeth
+                            setInitialToothColor(child); // Set initial color based on status
+                            teeth.push(child); // Store the tooth mesh for interaction
+                        }
+                    }
+                });
+
+                // console.log("Teeth meshes loaded:", teeth); // Debugging line to see all loaded teeth meshes
+                
+                // Hide the loader once the model is fully loaded
+                document.getElementById('loader').style.display = 'none';
+            },
+            (xhr) => {
+                console.log((xhr.loaded / xhr.total * 100) + '% loaded'); // Loading progress
+            },
+            (error) => {
+                console.error('An error happened:', error);
+            }
+        );
+
+        // Set initial color of teeth based on status
+        function setInitialToothColor(tooth) {
+            switch (tooth.userData.status) {
+                case 'healthy':
+                    tooth.material = new THREE.MeshStandardMaterial({ color: 0x00ff00 }); // Healthy - green
+                    break;
+                case 'cavity':
+                    tooth.material = new THREE.MeshStandardMaterial({ color: 0xff0000 }); // Cavity - red
+                    break;
+                case 'root canal':
+                    tooth.material = new THREE.MeshStandardMaterial({ color: 0x0000ff }); // Root canal - blue
+                    break;
+                default:
+                    tooth.material = new THREE.MeshStandardMaterial({ color: 0x00ff00 }); // Default to healthy color
+                    break;
+            }
+        }
+
+        // Raycasting for mouse interaction
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        // Handle mouse click for interaction
+        window.addEventListener('click', (event) => {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+
+            // Check for intersections with any of the meshes (including teeth)
+            const intersects = raycaster.intersectObjects(teeth, true);
+
+            if (intersects.length > 0) {
+                const clickedObject = intersects[0].object;
+                // console.log('Clicked on object:', clickedObject.name);
+
+                // If it's a tooth, display the status and change color
+                if (clickedObject.userData.status === 'healthy') {
+                    showToast("This tooth is healthy", "green");
+                } else if (clickedObject.userData.status === 'cavity') {
+                    showToast("This tooth has a cavity", "red");
+                } else if (clickedObject.userData.status === 'root canal') {
+                    showToast("This tooth requires a root canal", "blue");
+                }
+
+                // Change the color based on the tooth's status
+                if (clickedObject.userData.status === 'healthy') {
+                    clickedObject.material.color.set(0x00ff00); // Healthy tooth - green
+                    clickedObject.userData.status = 'cavity'; // Update status
+                } else if (clickedObject.userData.status === 'cavity') {
+                    clickedObject.material.color.set(0xff0000); // Cavity - red
+                    clickedObject.userData.status = 'root canal'; // Update status
+                } else {
+                    clickedObject.material.color.set(0x0000ff); // Root canal - blue
+                    clickedObject.userData.status = 'healthy'; // Reset to healthy
+                }
+            } else {
+                console.log("No tooth clicked");
+            }
+        });
+
+        // Show a toast message
+        function showToast(message, color) {
+            const toast = document.createElement('div');
+            toast.classList.add('toast');
+            toast.style.backgroundColor = color;
+            toast.innerText = message;
+            document.body.appendChild(toast);
+
+            // Show the toast with opacity transition
+            setTimeout(() => {
+                toast.style.opacity = 1;
+            }, 10);
+
+            // Remove the toast after 3 seconds
+            setTimeout(() => {
+                toast.style.opacity = 0;
+                setTimeout(() => {
+                    document.body.removeChild(toast);
+                }, 500);
+            }, 3000);
+        }
+
+        // Open the skull's mouth (animate jaw)
+        function openMouth() {
+            if (jaw) {
+                const mouthOpenDuration = 1; // Duration in seconds
+                const targetRotation = Math.PI / 4; // Target rotation in radians (adjust as needed)
+                const initialRotation = jaw.rotation.x;
+
+                // Animate the jaw opening
+                let startTime = null;
+                function animateMouthOpen(time) {
+                    if (!startTime) startTime = time;
+                    const progress = (time - startTime) / (mouthOpenDuration * 1000); // Normalize time
+                    if (progress < 1) {
+                        jaw.rotation.x = initialRotation + (targetRotation - initialRotation) * progress;
+                        requestAnimationFrame(animateMouthOpen);
+                    } else {
+                        jaw.rotation.x = targetRotation; // Ensure final position
+                    }
+                }
+                requestAnimationFrame(animateMouthOpen);
+            }
+        }
+
+        // Trigger mouth opening when a key is pressed (e.g., 'O' key)
+        window.addEventListener('keydown', (event) => {
+            if (event.key === 'O' || event.key === 'o') {
+                openMouth(); // Open the mouth when the user presses the "O" key
+            }
+        });
+
+        // Animation Loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Resize Handler
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Skull Viewer</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/three@latest/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@latest/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@latest/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        if(typeof THREE !== undefined) {
+            console.log("Type of three: ", typeof THREE);
+            console.log("THREE: ", THREE);
+            // Scene, Camera, Renderer Setup
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+        
+            // Lighting
+            const light = new THREE.AmbientLight(0x404040); // Soft white light
+            scene.add(light);
+        
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(5, 10, 7.5);
+            scene.add(directionalLight);
+        
+            // Camera Position
+            camera.position.z = 5;
+        
+            // Controls
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        
+            // Load GLTF Model
+            const loader = new THREE.GLTFLoader();
+            loader.load(
+                './skull/skull.gltf', // Replace with your model's path
+                (gltf) => {
+                    const model = gltf.scene;
+                    model.scale.set(1, 1, 1); // Adjust scale as necessary
+                    scene.add(model);
+                },
+                (xhr) => {
+                    console.log((xhr.loaded / xhr.total * 100) + '% loaded'); // Loading progress
+                },
+                (error) => {
+                    console.error('An error happened:', error);
+                }
+            );
+        
+            // Animation Loop
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            animate();
+        
+            // Resize Handler
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        } else {
+            console.log("Three is not loaded");
+        }
+    </script>    
+</body>
+</html>
